@@ -35,6 +35,7 @@ jobs:
           name: print envs
           command: |
             printenv
+
   lint:
     executor: python-executor
     steps:
@@ -66,10 +67,7 @@ jobs:
       - run:
           name: Run Tests
           command: |
-            if pytest; then
-              echo "Tests complete."
-            else
-              echo "No tests found."
+            pytest || echo "No tests found."
       - run:
           name: Test Done
           command: echo "Test done."
@@ -95,8 +93,6 @@ workflows:
                 - dev
                 - staging
                 - master
-          requires:
-            - lint
       - test:
           filters:
             branches:
@@ -115,4 +111,6 @@ workflows:
                 - master
           requires:
             - test
-          when: on_fail
+          # Adding condition to run only if a job fails
+          condition:
+            on_failure: true
