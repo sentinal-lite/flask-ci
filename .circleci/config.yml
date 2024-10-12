@@ -1,17 +1,118 @@
+# version: 2.1
+
+# parameters:
+#   dest
+
+# jobs:
+#   say-hello:
+#     docker:
+#       - image: cimg/base:current
+
+#     steps:
+#       - checkout
+#       - run:
+#           name: "Say hello"
+#           command: "echo Hello, World!"
+
+# workflows:
+#   say-hello-workflow:
+#     jobs:
+#       - say-hello
+
 version: 2.1
 
-jobs:
-  say-hello:
+executors:
+  python-executor:
     docker:
-      - image: cimg/base:current
+      - image: circleci/python:3.8
+    working_directory: ~/repo
 
+jobs:
+  printEnv:
+    executor: python-executor
+    steps:
+      - run:
+          name: print envs
+          command: |
+            printenv
+  lint:
+    executor: python-executor
     steps:
       - checkout
       - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
+          name: Install dependencies
+          command: |
+            python -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+      - run:
+          name: Run Linting
+          command: |
+            flake8 .
+      - run:
+          name: Linting Done
+          command: echo "Linting complete."
+
+  test:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            python -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+      - run:
+          name: Run Tests
+          command: |
+            if pytest; then
+              echo "Tests complete."
+            else
+              echo "No tests found."
+      - run:
+          name: Test Done
+          command: echo "Test done."
+
+  pr-comment-fail:
+    executor: python-executor
+    steps:
+      - run:
+          name: Add Comment to PR
+          command: |
+            curl -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
+            -d '{"body":"PR failed on this stage: ${CIRCLE_STAGE} - [Job link](${CIRCLE_BUILD_URL})"}' \
+            https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/issues/${CIRCLE_PR_NUMBER}/comments
 
 workflows:
-  say-hello-workflow:
+  version: 2
+  lint_and_test:
     jobs:
-      - say-hello
+      - lint:
+          filters:
+            branches:
+              only:
+                - dev
+                - staging
+                - master
+          requires:
+            - lint
+      - test:
+          filters:
+            branches:
+              only:
+                - dev
+                - staging
+                - master
+          requires:
+            - lint
+      - pr-comment-fail:
+          filters:
+            branches:
+              only:
+                - dev
+                - staging
+                - master
+          requires:
+            - test
+          when: on_fail
