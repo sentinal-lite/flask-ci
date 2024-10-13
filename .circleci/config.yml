@@ -85,8 +85,7 @@ jobs:
           when: on_fail
 
 workflows:
-  version: 2
-  lint_and_test:
+  say-hello-workflow:
     jobs:
       - lint:
           filters:
