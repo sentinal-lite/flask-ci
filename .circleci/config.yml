@@ -1,7 +1,5 @@
 version: 2.1
 
-parameters: dest
-
 jobs:
   say-hello:
     docker:
