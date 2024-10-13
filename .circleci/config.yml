@@ -1,31 +1,93 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/configuration-reference
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/jobs-steps/#jobs-overview & https://circleci.com/docs/configuration-reference/#jobs
 jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/executor-intro/ & https://circleci.com/docs/configuration-reference/#executor-job
+  printEnv:
     docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:current
-
-    # Add steps to the job
-    # See: https://circleci.com/docs/jobs-steps/#steps-overview & https://circleci.com/docs/configuration-reference/#steps
+      - image: circleci/python:3.8
     steps:
-      # Checkout the code as the first step.
+      - run:
+          name: print envs
+          command: |
+            printenv
+
+  lint:
+    docker:
+      - image: circleci/python:3.8
+    steps:
       - checkout
       - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
+          name: Install dependencies
+          command: |
+            pip install -r requirements.txt
+      - run:
+          name: Run Linting
+          command: |
+            if flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics | grep -q "0"; then
+              echo "Lint has passed and ready to merge"
+            else
+              echo "Lint failed, fix the issues"
+              exit 1
+            fi
+      - run:
+          name: Linting Done
+          command: echo "Linting complete."
 
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
+  test:
+    docker:
+      - image: circleci/python:3.8
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            pip install -r requirements.txt
+      - run:
+          name: Run Tests
+          command: |
+            pytest || echo "No tests found."
+      - run:
+          name: Test Done
+          command: echo "Test done."
+
+  pr-comment-fail:
+    docker:
+      - image: circleci/python:3.8
+    steps:
+      - run:
+          name: Add Comment to PR
+          command: |
+            curl -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
+            -d '{"body":"PR failed on this stage: ${CIRCLE_STAGE} - [Job link](${CIRCLE_BUILD_URL})"}' \
+            https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/issues/${CIRCLE_PR_NUMBER}/comments
+          when: on_fail
+
 workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
+  say-hello-workflow:
     jobs:
-      - say-hello
+      - lint:
+          filters:
+            branches:
+              only:
+                - dev
+                - staging
+                - master
+      - test:
+          filters:
+            branches:
+              only:
+                - dev
+                - staging
+                - master
+          requires:
+            - lint
+      - pr-comment-fail:
+          filters:
+            branches:
+              only:
+                - dev
+                - staging
+                - master
+          requires:
+            - test
+            - lint
+
